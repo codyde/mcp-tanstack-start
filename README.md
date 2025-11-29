@@ -1,18 +1,18 @@
-# mcp-start
+# mcp-tanstack-start
 
 MCP (Model Context Protocol) integration for [TanStack Start](https://tanstack.com/start). Build AI-powered tools that can be called by LLMs using the standardized MCP protocol.
 
 ## Installation
 
 ```bash
-npm install mcp-start
+npm install mcp-tanstack-start
 ```
 
 or with your preferred package manager:
 
 ```bash
-pnpm add mcp-start
-yarn add mcp-start
+pnpm add mcp-tanstack-start
+yarn add mcp-tanstack-start
 ```
 
 **Peer dependencies:** This package requires `zod` (^3.0.0) to be installed in your project.
@@ -27,7 +27,7 @@ Create a tool that LLMs can call:
 
 ```typescript
 // src/mcp/tools/weather.ts
-import { defineTool } from 'mcp-start'
+import { defineTool } from 'mcp-tanstack-start'
 import { z } from 'zod'
 
 export const weatherTool = defineTool({
@@ -50,7 +50,7 @@ export const weatherTool = defineTool({
 
 ```typescript
 // src/mcp/index.ts
-import { createMcpServer } from 'mcp-start'
+import { createMcpServer } from 'mcp-tanstack-start'
 import { weatherTool } from './tools/weather'
 
 export const mcp = createMcpServer({
@@ -82,7 +82,7 @@ Your MCP server is now live at `/api/mcp`.
 ## Adding Multiple Tools
 
 ```typescript
-import { createMcpServer, defineTool } from 'mcp-start'
+import { createMcpServer, defineTool } from 'mcp-tanstack-start'
 import { z } from 'zod'
 
 const searchTool = defineTool({
@@ -122,7 +122,7 @@ export const mcp = createMcpServer({
 Return different content types from your tools:
 
 ```typescript
-import { defineTool, text, image } from 'mcp-start'
+import { defineTool, text, image } from 'mcp-tanstack-start'
 import { z } from 'zod'
 
 const screenshotTool = defineTool({
@@ -146,7 +146,7 @@ Protect your MCP endpoint:
 ```typescript
 // src/routes/api/mcp.ts
 import { createAPIFileRoute } from '@tanstack/react-start/api'
-import { withMcpAuth } from 'mcp-start'
+import { withMcpAuth } from 'mcp-tanstack-start'
 import { mcp } from '../../mcp'
 import { verifyJWT } from '../../lib/auth'
 

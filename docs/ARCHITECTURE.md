@@ -1,13 +1,13 @@
-# mcp-start Architecture
+# mcp-tanstack-start Architecture
 
 ## Overview
 
-**mcp-start** is a TanStack Start-native MCP (Model Context Protocol) integration that lets you expose AI-callable tools from your application using Web Standard APIs.
+**mcp-tanstack-start** is a TanStack Start-native MCP (Model Context Protocol) integration that lets you expose AI-callable tools from your application using Web Standard APIs.
 
 ## File Structure
 
 ```
-mcp-start/
+mcp-tanstack-start/
 ├── src/
 │   ├── index.ts          # Main exports
 │   ├── server.ts         # createMcpServer() - core server factory
@@ -105,7 +105,7 @@ No session management, making it perfect for:
 
 ### WebStandardTransport
 
-The heart of mcp-start. Implements the `Transport` interface from `@modelcontextprotocol/sdk`:
+The heart of mcp-tanstack-start. Implements the `Transport` interface from `@modelcontextprotocol/sdk`:
 
 ```typescript
 interface Transport {
@@ -213,7 +213,7 @@ export const Route = createFileRoute("/api/mcp")({
 
 ## Protocol Details
 
-mcp-start implements the [MCP Streamable HTTP transport](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports):
+mcp-tanstack-start implements the [MCP Streamable HTTP transport](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports):
 
 - **POST /api/mcp**: JSON-RPC 2.0 requests (initialize, tools/list, tools/call, etc.)
 - **GET /api/mcp**: SSE stream for server-to-client notifications

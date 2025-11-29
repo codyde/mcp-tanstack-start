@@ -1,6 +1,6 @@
 {
-  "name": "mcp-start",
-  "version": "0.1.1",
+  "name": "mcp-tanstack-start",
+  "version": "0.2.0",
   "description": "MCP (Model Context Protocol) integration for TanStack Start",
   "type": "module",
   "main": "dist/index.js",
@@ -34,12 +34,12 @@
   "author": "Cody De Arkland",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/codyde/mcp-start.git"
+    "url": "git+https://github.com/codyde/mcp-tanstack-start.git"
   },
   "bugs": {
-    "url": "https://github.com/codyde/mcp-start/issues"
+    "url": "https://github.com/codyde/mcp-tanstack-start/issues"
   },
-  "homepage": "https://github.com/codyde/mcp-start#readme",
+  "homepage": "https://github.com/codyde/mcp-tanstack-start#readme",
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0"
