@@ -74,6 +74,12 @@ export interface AuthInfo {
 }
 
 /**
+ * Base tool definition type for arrays (non-generic for variance compatibility)
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type AnyToolDefinition = ToolDefinition<any>;
+
+/**
  * MCP Server configuration
  */
 export interface McpServerConfig {
@@ -82,7 +88,7 @@ export interface McpServerConfig {
   /** Version of the MCP server */
   version: string;
   /** Tools to register with the server */
-  tools?: ToolDefinition[];
+  tools?: AnyToolDefinition[];
   /** Optional instructions for the AI on how to use this server */
   instructions?: string;
 }
@@ -107,7 +113,7 @@ export interface McpServerInstance {
     options?: McpRequestOptions
   ) => Promise<Response>;
   /** Add a tool to the server */
-  addTool: (tool: ToolDefinition) => void;
+  addTool: (tool: AnyToolDefinition) => void;
   /** Get server info */
   getInfo: () => { name: string; version: string };
 }

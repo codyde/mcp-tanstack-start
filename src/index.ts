@@ -12,6 +12,7 @@ export type { AuthMiddlewareOptions } from "./middleware.js";
 export type {
   // Tool types
   ToolDefinition,
+  AnyToolDefinition,
   ToolContent,
   TextContent,
   ImageContent,
