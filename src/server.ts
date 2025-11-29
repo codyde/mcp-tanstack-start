@@ -1,0 +1,226 @@
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type { z } from "zod";
+import { WebStandardTransport } from "./web-transport.js";
+import type {
+  McpServerConfig,
+  McpServerInstance,
+  McpRequestOptions,
+  ToolDefinition,
+  ToolExecutionContext,
+} from "./types.js";
+
+/**
+ * Create an MCP server instance for use with TanStack Start.
+ */
+export function createMcpServer(config: McpServerConfig): McpServerInstance {
+  const { name, version, tools = [], instructions } = config;
+
+  // Store tool definitions for registration
+  const toolDefinitions: ToolDefinition[] = [...tools];
+
+  // Create the underlying MCP server
+  const server = new McpServer(
+    { name, version },
+    {
+      capabilities: {
+        tools: toolDefinitions.length > 0 ? {} : undefined,
+      },
+      instructions,
+    }
+  );
+
+  // Create our Web Standard transport
+  const transport = new WebStandardTransport();
+
+  // Register all tools with access to transport for auth context
+  for (const tool of toolDefinitions) {
+    registerTool(server, tool, transport);
+  }
+
+  // Connection state with proper locking to prevent race conditions
+  let connectionPromise: Promise<void> | null = null;
+
+  return {
+    handleRequest: async (
+      request: Request,
+      options?: McpRequestOptions
+    ): Promise<Response> => {
+      // Ensure server is connected to transport (with race condition protection)
+      if (!connectionPromise) {
+        connectionPromise = server.connect(transport);
+      }
+      await connectionPromise;
+
+      return transport.handleRequest(request, options);
+    },
+
+    addTool: (tool: ToolDefinition) => {
+      toolDefinitions.push(tool);
+      registerTool(server, tool, transport);
+    },
+
+    getInfo: () => ({ name, version }),
+  };
+}
+
+/**
+ * Extract raw shape from a Zod object schema.
+ *
+ * Note: This accesses Zod's internal `_def` property which is not part of the
+ * public API. While this works with current Zod versions (3.x), it may break
+ * in future major versions. Consider using the `zod-to-json-schema` package
+ * for more robust schema conversion if you encounter issues.
+ */
+function extractZodShape(schema: z.ZodType): Record<string, z.ZodType> | undefined {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const def = schema._def as any;
+  if (def?.typeName === "ZodObject") {
+    return def.shape();
+  }
+  return undefined;
+}
+
+/**
+ * Register a tool with the MCP server
+ */
+function registerTool(
+  server: McpServer,
+  tool: ToolDefinition,
+  transport: WebStandardTransport
+): void {
+  // Extract the raw shape from the Zod object schema
+  // The SDK expects a raw shape like { message: z.string() }, not z.object({...})
+  const shape = extractZodShape(tool.parameters);
+
+  const executeWithContext = async (
+    params: Record<string, unknown>
+  ): Promise<CallToolResult> => {
+    // Get auth and signal from the transport's current request options
+    const options = transport.getCurrentOptions();
+
+    const context: ToolExecutionContext = {
+      auth: options?.auth,
+      signal: options?.signal,
+    };
+
+    try {
+      const result = await tool.execute(params, context);
+      return normalizeToCallToolResult(result);
+    } catch (error) {
+      // Sanitize error message to avoid leaking sensitive information
+      const message =
+        error instanceof Error
+          ? error.message
+          : "An error occurred during tool execution";
+      return {
+        content: [{ type: "text", text: `Error: ${message}` }],
+        isError: true,
+      };
+    }
+  };
+
+  if (shape) {
+    // Use the deprecated .tool() method with the raw shape
+    // Note: The SDK's current API requires this approach for custom parameter shapes.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (server as any).tool(
+      tool.name,
+      tool.description,
+      shape,
+      async (params: Record<string, unknown>): Promise<CallToolResult> => {
+        return executeWithContext(params);
+      }
+    );
+  } else {
+    // Fallback for non-object schemas - use empty shape
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (server as any).tool(
+      tool.name,
+      tool.description,
+      {},
+      async (): Promise<CallToolResult> => {
+        return executeWithContext({});
+      }
+    );
+  }
+}
+
+/**
+ * Normalize tool execution result to SDK's CallToolResult format
+ */
+function normalizeToCallToolResult(result: unknown): CallToolResult {
+  if (typeof result === "string") {
+    return { content: [{ type: "text", text: result }] };
+  }
+
+  if (Array.isArray(result)) {
+    return { content: result.map(normalizeContentItem) };
+  }
+
+  if (
+    typeof result === "object" &&
+    result !== null &&
+    "content" in result &&
+    Array.isArray((result as { content: unknown[] }).content)
+  ) {
+    const typedResult = result as { content: unknown[]; isError?: boolean };
+    return {
+      content: typedResult.content.map(normalizeContentItem),
+      isError: typedResult.isError,
+    };
+  }
+
+  return { content: [{ type: "text", text: JSON.stringify(result) }] };
+}
+
+function normalizeContentItem(
+  item: unknown
+): CallToolResult["content"][number] {
+  if (typeof item === "string") {
+    return { type: "text", text: item };
+  }
+
+  if (typeof item === "object" && item !== null && "type" in item) {
+    const typed = item as { type: string; [key: string]: unknown };
+
+    switch (typed.type) {
+      case "text":
+        return { type: "text", text: String(typed.text || "") };
+      case "image":
+        return {
+          type: "image",
+          data: String(typed.data || ""),
+          mimeType: String(typed.mimeType || "image/png"),
+        };
+      case "resource": {
+        const resource = typed.resource as {
+          uri: string;
+          text?: string;
+          blob?: string;
+          mimeType?: string;
+        };
+        if (resource.text) {
+          return {
+            type: "resource",
+            resource: { uri: resource.uri, text: resource.text, mimeType: resource.mimeType },
+          };
+        }
+        if (resource.blob) {
+          return {
+            type: "resource",
+            resource: { uri: resource.uri, blob: resource.blob, mimeType: resource.mimeType },
+          };
+        }
+        return {
+          type: "resource",
+          resource: { uri: resource.uri, text: "" },
+        };
+      }
+      default:
+        return { type: "text", text: JSON.stringify(item) };
+    }
+  }
+
+  return { type: "text", text: JSON.stringify(item) };
+}
