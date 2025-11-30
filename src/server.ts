@@ -12,9 +12,11 @@ import type {
 
 /**
  * Create an MCP server instance for use with TanStack Start.
+ *
+ * @param config - Server configuration including name, version, tools, and transport options
  */
 export function createMcpServer(config: McpServerConfig): McpServerInstance {
-  const { name, version, tools = [], instructions } = config;
+  const { name, version, tools = [], instructions, transport: transportOptions } = config;
 
   // Store tool definitions for registration
   const toolDefinitions: ToolDefinition[] = [...tools];
@@ -30,8 +32,8 @@ export function createMcpServer(config: McpServerConfig): McpServerInstance {
     }
   );
 
-  // Create our Web Standard transport
-  const transport = new WebStandardTransport();
+  // Create our Web Standard transport with optional configuration
+  const transport = new WebStandardTransport(transportOptions);
 
   // Register all tools with access to transport for auth context
   for (const tool of toolDefinitions) {

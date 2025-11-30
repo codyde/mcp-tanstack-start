@@ -63,9 +63,14 @@ Uses native `Request`/`Response` instead of Node.js `http.IncomingMessage`/`Serv
 We built `WebStandardTransport` that implements the SDK's `Transport` interface directly. This avoids the need for fake request/response adapters that other implementations use.
 
 The transport handles:
-- **POST requests**: JSON-RPC message parsing, validation, and routing
-- **GET requests**: SSE streams for server-to-client notifications
-- **Response management**: Tracks pending requests and resolves them when responses are ready
+- **POST requests**: Single JSON-RPC message parsing, validation, and routing (no batches per 2025-06-18 spec)
+- **GET requests**: SSE streams for server-to-client notifications (stateful mode only)
+- **DELETE requests**: Session termination
+- **Stateless mode**: Graceful handling of missing sessions for serverless/edge deployments
+- **Stateful mode**: Persistent sessions with pluggable storage for SSE push notifications
+- **Origin validation**: DNS rebinding attack protection
+- **SSE resumability**: Event IDs and `Last-Event-ID` header support (stateful mode)
+- **Protocol versioning**: `MCP-Protocol-Version` header with fallback
 
 ### 3. Zod-First Design
 
@@ -94,12 +99,21 @@ Designed specifically for TanStack Start's API routes (`createFileRoute` with `s
 - Server functions use internal routing and auto-serialization
 - API routes provide standard HTTP request/response control
 
-### 5. Stateless Mode
+### 5. Deployment-Agnostic Session Management
 
-No session management, making it perfect for:
-- Serverless deployments
-- Horizontal scaling
-- Simple deployment models
+Two modes of operation to fit any deployment:
+
+**Stateless Mode (Default)**:
+- Works on serverless (Vercel, Netlify, Lambda), edge (Cloudflare Workers), and containers (Railway, Fly.io)
+- No persistent sessions - each request is handled independently
+- Missing sessions are handled gracefully without errors
+- Perfect for horizontal scaling and distributed deployments
+
+**Stateful Mode (Opt-in)**:
+- Enables persistent sessions for SSE push notifications
+- Supports pluggable session stores (Redis, DynamoDB, etc.)
+- Falls back to in-memory storage for single-instance deployments
+- Full 2025-06-18 spec compliance with resumability
 
 ## Core Components Deep Dive
 
@@ -213,12 +227,16 @@ export const Route = createFileRoute("/api/mcp")({
 
 ## Protocol Details
 
-mcp-tanstack-start implements the [MCP Streamable HTTP transport](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports):
+mcp-tanstack-start implements the [MCP Streamable HTTP transport (2025-06-18)](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports):
 
-- **POST /api/mcp**: JSON-RPC 2.0 requests (initialize, tools/list, tools/call, etc.)
-- **GET /api/mcp**: SSE stream for server-to-client notifications
-- **Stateless mode**: No session ID management
-- **SSE responses**: Tool call responses are sent as Server-Sent Events
+- **POST /api/mcp**: Single JSON-RPC 2.0 message per request (no batch support per spec)
+- **GET /api/mcp**: SSE stream for server-to-client notifications (stateful mode only)
+- **DELETE /api/mcp**: Session termination
+- **Stateless mode**: Default mode that works on serverless/edge/distributed - missing sessions handled gracefully
+- **Stateful mode**: Opt-in mode with persistent sessions for SSE push notifications
+- **Pluggable session store**: Bring your own Redis, DynamoDB, etc. for distributed stateful deployments
+- **Origin validation**: DNS rebinding attack protection
+- **Protocol version**: `MCP-Protocol-Version` header with fallback to `2025-03-26`
 
 ## Lines of Code
 
@@ -249,11 +267,26 @@ Options were:
 - Runtime validation before tool execution
 - Ecosystem compatibility (most TypeScript projects already use Zod)
 
-### Why stateless mode only?
+### Why stateless by default?
 
-- Simpler deployment model
-- Works with serverless
-- No Redis/database needed for session storage
-- Sufficient for most use cases
+Modern deployments are predominantly serverless, edge, or containerized - environments where in-memory sessions are fundamentally incompatible:
+- **Serverless** (Vercel, Netlify, Lambda): No persistent memory between invocations
+- **Edge** (Cloudflare Workers, Deno Deploy): Distributed with no shared state
+- **Containers** (Railway, Fly.io): Can restart, scale horizontally
 
-Session support could be added later if needed.
+Our stateless-first design:
+- Works everywhere out of the box
+- Handles missing sessions gracefully (no 404 errors for expired sessions)
+- Requires no external dependencies
+
+For use cases requiring SSE push notifications, enable stateful mode with a pluggable session store:
+
+```typescript
+// Stateful with Redis for distributed deployments
+createMcpServer({
+  transport: {
+    stateful: true,
+    sessionStore: myRedisStore,
+  }
+});
+```

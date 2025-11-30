@@ -23,6 +23,10 @@ export type {
   McpServerConfig,
   McpServerInstance,
   McpRequestOptions,
+  TransportOptions,
+  // Session types (for custom session stores)
+  SessionStore,
+  SessionData,
   // Auth types
   AuthInfo,
   TokenVerifier,
