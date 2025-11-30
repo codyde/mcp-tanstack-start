@@ -17,28 +17,36 @@ yarn add mcp-tanstack-start @modelcontextprotocol/sdk zod
 
 ## Quick Start
 
-Get up and running in 3 steps:
-
-### 1. Create the API Route
-
-First, set up the MCP endpoint in your TanStack Start app:
+Get up and running with a single file. Here's a complete MCP server with tools in one API route:
 
 ```typescript
 // src/routes/api/mcp.ts
 import { createFileRoute } from '@tanstack/react-router'
-import { mcp } from '../../mcp'
+import { createMcpServer, defineTool } from 'mcp-tanstack-start'
+import { z } from 'zod'
 
-/**
- * MCP API Route
- *
- * This endpoint handles Model Context Protocol requests.
- * AI assistants and MCP clients can connect to this endpoint
- * to interact with your app's tools.
- *
- * Endpoints:
- * - POST /api/mcp - JSON-RPC 2.0 requests
- * - GET /api/mcp - SSE stream for server-to-client notifications
- */
+// Define a tool
+const echoTool = defineTool({
+  name: 'echo',
+  description: 'Echo back a message',
+  parameters: z.object({
+    message: z.string().describe('The message to echo back'),
+  }),
+  execute: async ({ message }) => {
+    return `You said: ${message}`
+  },
+})
+
+// Create the MCP server
+const mcp = createMcpServer({
+  name: 'my-tanstack-app',
+  version: '1.0.0',
+  instructions: `This is my TanStack Start app with MCP tools.
+You can use the available tools to interact with the application.`,
+  tools: [echoTool],
+})
+
+// Wire up the route handlers
 export const Route = createFileRoute('/api/mcp')({
   server: {
     handlers: {
@@ -53,50 +61,53 @@ export const Route = createFileRoute('/api/mcp')({
 })
 ```
 
-### 2. Create the MCP Server
+That's it! Your MCP server is now live at `/api/mcp`.
 
-Create an MCP server instance that will manage your tools:
+## Breaking It Down
 
-```typescript
-// src/mcp/index.ts
-import { createMcpServer } from 'mcp-tanstack-start'
-import { echoTool } from './tools/echo'
+### Setting Up the API Route
 
-export const mcp = createMcpServer({
-  name: 'my-tanstack-app',
-  version: '1.0.0',
-  instructions: `This is my TanStack Start app with MCP tools.
-You can use the available tools to interact with the application.`,
-  tools: [echoTool],
-})
-```
-
-### 3. Define Your Tools
-
-Create tools that LLMs can call:
+The API route is where your MCP server lives. It handles both POST (for JSON-RPC requests) and GET (for SSE streams):
 
 ```typescript
-// src/mcp/tools/echo.ts
-import { defineTool } from 'mcp-tanstack-start'
-import { z } from 'zod'
+// src/routes/api/mcp.ts
+import { createFileRoute } from '@tanstack/react-router'
+import { mcp } from '../../mcp'
 
-export const echoTool = defineTool({
-  name: 'echo',
-  description: 'Echo back a message',
-  parameters: z.object({
-    message: z.string().describe('The message to echo back'),
-  }),
-  execute: async ({ message }) => {
-    return `You said: ${message}`
+export const Route = createFileRoute('/api/mcp')({
+  server: {
+    handlers: {
+      POST: async ({ request }) => {
+        return mcp.handleRequest(request)
+      },
+      GET: async ({ request }) => {
+        return mcp.handleRequest(request)
+      },
+    },
   },
 })
 ```
 
-Your MCP server is now live at `/api/mcp`!
+### Creating the MCP Server
 
-## Adding More Tools
+The MCP server manages your tools and handles the protocol communication:
 
-Create additional tools and add them to your server:
+```typescript
+// src/mcp/index.ts
+import { createMcpServer } from 'mcp-tanstack-start'
+import { echoTool, weatherTool } from './tools'
+
+export const mcp = createMcpServer({
+  name: 'my-tanstack-app',      // Server name
+  version: '1.0.0',              // Server version
+  instructions: `Optional instructions for AI assistants about how to use your tools.`,
+  tools: [echoTool, weatherTool], // Array of tools
+})
+```
+
+### Defining Tools
+
+Tools are the functions that LLMs can call. Each tool has a name, description, parameters (defined with Zod), and an execute function:
 
 ```typescript
 // src/mcp/tools/weather.ts
@@ -111,13 +122,19 @@ export const weatherTool = defineTool({
     units: z.enum(['celsius', 'fahrenheit']).optional().default('celsius'),
   }),
   execute: async ({ city, units }) => {
-    // Your weather API logic here
+    // Your logic here
     const temp = 72
     const unit = units === 'fahrenheit' ? 'F' : 'C'
     return `The weather in ${city} is ${temp}°${unit}`
   },
 })
 ```
+
+The `parameters` object uses Zod schemas for type-safe validation. The `execute` function receives the validated parameters and returns a string response.
+
+## Adding Multiple Tools
+
+You can add as many tools as you need:
 
 ```typescript
 // src/mcp/tools/search.ts
@@ -138,19 +155,37 @@ export const searchTool = defineTool({
 })
 ```
 
-Add them to your server:
+```typescript
+// src/mcp/tools/calculate.ts
+import { defineTool } from 'mcp-tanstack-start'
+import { z } from 'zod'
+
+export const calculateTool = defineTool({
+  name: 'calculate',
+  description: 'Perform mathematical calculations',
+  parameters: z.object({
+    expression: z.string().describe('Math expression to evaluate'),
+  }),
+  execute: async ({ expression }) => {
+    const result = evaluate(expression)
+    return `Result: ${result}`
+  },
+})
+```
+
+Add them all to your server:
 
 ```typescript
 // src/mcp/index.ts
 import { createMcpServer } from 'mcp-tanstack-start'
-import { echoTool } from './tools/echo'
 import { weatherTool } from './tools/weather'
 import { searchTool } from './tools/search'
+import { calculateTool } from './tools/calculate'
 
 export const mcp = createMcpServer({
   name: 'my-tanstack-app',
   version: '1.0.0',
-  tools: [echoTool, weatherTool, searchTool],
+  tools: [weatherTool, searchTool, calculateTool],
 })
 ```
 
