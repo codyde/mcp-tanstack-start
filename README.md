@@ -5,25 +5,98 @@ MCP (Model Context Protocol) integration for [TanStack Start](https://tanstack.c
 ## Installation
 
 ```bash
-npm install mcp-tanstack-start
+npm install mcp-tanstack-start @modelcontextprotocol/sdk zod
 ```
 
 or with your preferred package manager:
 
 ```bash
-pnpm add mcp-tanstack-start
-yarn add mcp-tanstack-start
+pnpm add mcp-tanstack-start @modelcontextprotocol/sdk zod
+yarn add mcp-tanstack-start @modelcontextprotocol/sdk zod
 ```
-
-**Peer dependencies:** This package requires `zod` (^3.0.0) to be installed in your project.
 
 ## Quick Start
 
 Get up and running in 3 steps:
 
-### 1. Define a Tool
+### 1. Create the API Route
 
-Create a tool that LLMs can call:
+First, set up the MCP endpoint in your TanStack Start app:
+
+```typescript
+// src/routes/api/mcp.ts
+import { createFileRoute } from '@tanstack/react-router'
+import { mcp } from '../../mcp'
+
+/**
+ * MCP API Route
+ *
+ * This endpoint handles Model Context Protocol requests.
+ * AI assistants and MCP clients can connect to this endpoint
+ * to interact with your app's tools.
+ *
+ * Endpoints:
+ * - POST /api/mcp - JSON-RPC 2.0 requests
+ * - GET /api/mcp - SSE stream for server-to-client notifications
+ */
+export const Route = createFileRoute('/api/mcp')({
+  server: {
+    handlers: {
+      POST: async ({ request }) => {
+        return mcp.handleRequest(request)
+      },
+      GET: async ({ request }) => {
+        return mcp.handleRequest(request)
+      },
+    },
+  },
+})
+```
+
+### 2. Create the MCP Server
+
+Create an MCP server instance that will manage your tools:
+
+```typescript
+// src/mcp/index.ts
+import { createMcpServer } from 'mcp-tanstack-start'
+import { echoTool } from './tools/echo'
+
+export const mcp = createMcpServer({
+  name: 'my-tanstack-app',
+  version: '1.0.0',
+  instructions: `This is my TanStack Start app with MCP tools.
+You can use the available tools to interact with the application.`,
+  tools: [echoTool],
+})
+```
+
+### 3. Define Your Tools
+
+Create tools that LLMs can call:
+
+```typescript
+// src/mcp/tools/echo.ts
+import { defineTool } from 'mcp-tanstack-start'
+import { z } from 'zod'
+
+export const echoTool = defineTool({
+  name: 'echo',
+  description: 'Echo back a message',
+  parameters: z.object({
+    message: z.string().describe('The message to echo back'),
+  }),
+  execute: async ({ message }) => {
+    return `You said: ${message}`
+  },
+})
+```
+
+Your MCP server is now live at `/api/mcp`!
+
+## Adding More Tools
+
+Create additional tools and add them to your server:
 
 ```typescript
 // src/mcp/tools/weather.ts
@@ -46,74 +119,38 @@ export const weatherTool = defineTool({
 })
 ```
 
-### 2. Create the MCP Server
-
 ```typescript
-// src/mcp/index.ts
-import { createMcpServer } from 'mcp-tanstack-start'
-import { weatherTool } from './tools/weather'
-
-export const mcp = createMcpServer({
-  name: 'my-tanstack-app',
-  version: '1.0.0',
-  tools: [weatherTool],
-})
-```
-
-### 3. Create the API Route
-
-```typescript
-// src/routes/api/mcp.ts
-import { createAPIFileRoute } from '@tanstack/react-start/api'
-import { mcp } from '../../mcp'
-
-export const APIRoute = createAPIFileRoute('/api/mcp')({
-  POST: async ({ request }) => {
-    return mcp.handleRequest(request)
-  },
-  GET: async ({ request }) => {
-    return mcp.handleRequest(request)
-  },
-})
-```
-
-Your MCP server is now live at `/api/mcp`.
-
-## Adding Multiple Tools
-
-```typescript
-import { createMcpServer, defineTool } from 'mcp-tanstack-start'
+// src/mcp/tools/search.ts
+import { defineTool } from 'mcp-tanstack-start'
 import { z } from 'zod'
 
-const searchTool = defineTool({
+export const searchTool = defineTool({
   name: 'search',
   description: 'Search the knowledge base',
   parameters: z.object({
-    query: z.string(),
-    limit: z.number().optional().default(10),
+    query: z.string().describe('Search query'),
+    limit: z.number().optional().default(10).describe('Maximum results'),
   }),
   execute: async ({ query, limit }) => {
     const results = await searchDatabase(query, limit)
     return JSON.stringify(results)
   },
 })
+```
 
-const calculateTool = defineTool({
-  name: 'calculate',
-  description: 'Perform mathematical calculations',
-  parameters: z.object({
-    expression: z.string().describe('Math expression to evaluate'),
-  }),
-  execute: async ({ expression }) => {
-    const result = evaluate(expression)
-    return `Result: ${result}`
-  },
-})
+Add them to your server:
+
+```typescript
+// src/mcp/index.ts
+import { createMcpServer } from 'mcp-tanstack-start'
+import { echoTool } from './tools/echo'
+import { weatherTool } from './tools/weather'
+import { searchTool } from './tools/search'
 
 export const mcp = createMcpServer({
-  name: 'my-app',
+  name: 'my-tanstack-app',
   version: '1.0.0',
-  tools: [searchTool, calculateTool],
+  tools: [echoTool, weatherTool, searchTool],
 })
 ```
 
@@ -141,11 +178,11 @@ const screenshotTool = defineTool({
 
 ## Authentication
 
-Protect your MCP endpoint:
+Protect your MCP endpoint with authentication:
 
 ```typescript
 // src/routes/api/mcp.ts
-import { createAPIFileRoute } from '@tanstack/react-start/api'
+import { createFileRoute } from '@tanstack/react-router'
 import { withMcpAuth } from 'mcp-tanstack-start'
 import { mcp } from '../../mcp'
 import { verifyJWT } from '../../lib/auth'
@@ -166,9 +203,13 @@ const authenticatedHandler = withMcpAuth(
   }
 )
 
-export const APIRoute = createAPIFileRoute('/api/mcp')({
-  POST: authenticatedHandler,
-  GET: authenticatedHandler,
+export const Route = createFileRoute('/api/mcp')({
+  server: {
+    handlers: {
+      POST: authenticatedHandler,
+      GET: authenticatedHandler,
+    },
+  },
 })
 ```
 
@@ -250,6 +291,13 @@ Implements [MCP Streamable HTTP transport](https://modelcontextprotocol.io/speci
 - JSON-RPC 2.0 message format
 
 Supported methods: `initialize`, `initialized`, `tools/list`, `tools/call`, `ping`
+
+## Examples
+
+Check out the [example blog implementation](https://github.com/codyde/codyde-start) to see mcp-tanstack-start in action with:
+- Blog post listing and retrieval
+- Content search
+- Server info tools
 
 ## License
 
